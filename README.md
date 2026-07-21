@@ -65,6 +65,47 @@ with `jq`:
 jq -c '{ts, binance}' dotprice.ndjson
 ```
 
+## Dashboard
+
+`scripts/` holds an interactive dashboard that turns the collected ticks into an
+oracle price: it normalizes every venue to USD, drops stale, thin, and outlier
+prints, and takes a volume-weighted average (VWAP) of what's left. It's a React
+app built with Vite and run through Bun, and it reads the `.ndjson` files from
+the repo root live (a small dev-server middleware serves them).
+
+Requirements: [Bun](https://bun.sh). Run the poller first (see above) so there's
+data to chart.
+
+```sh
+cd scripts
+bun install
+bun run dev
+```
+
+Then open the URL Vite prints (http://localhost:3000). Leaving the poller running
+and refreshing the page picks up new ticks.
+
+What you get:
+
+* Three filters, each recomputing the survivors and the VWAP live: a staleness
+  window (0 to 24h), a minimum share of total volume (0 to 100%, defaults to the
+  1% rule), and a MAD outlier threshold.
+* A VWAP-over-time chart. The live curve tracks the sliders as you move them.
+  Hit **Plot** to freeze the current config as a colored curve and keep going on
+  a fresh live one; layer several to compare filter settings. **Hide current**
+  drops the live curve so you can look at just the frozen ones, and **Clear**
+  removes them.
+
+Notes on the math:
+
+* Prices from `coinbase`, `kraken`, and `crypto.com` are treated as USD. Every
+  other venue is USDT-quoted and gets multiplied by a USDT/USD index built from
+  `usdprice.ndjson` (VWAP of its venues) at the matching `ts`.
+* `digifinex` volume is base (DOT), so it's converted to USD-notional before any
+  weighting. See the volume note below.
+
+Run the pipeline's unit tests with `bun test` from `scripts/`.
+
 ## Notes
 
 * The venue list and the JSON field paths live in `src/venues.rs`. The
