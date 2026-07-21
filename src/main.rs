@@ -67,8 +67,9 @@ fn append_line(path: &str, line: &str) -> std::io::Result<()> {
     writeln!(f, "{line}")
 }
 
-/// Fetch every venue for one asset concurrently, then append one NDJSON line.
-async fn poll(client: &reqwest::Client, venues: &[Venue], path: &str) -> anyhow::Result<()> {
+/// Fetch every venue for one asset concurrently, then append one NDJSON line
+/// stamped with `ts` (the shared tick time, so both files agree per tick).
+async fn poll(client: &reqwest::Client, venues: &[Venue], path: &str, ts: u64) -> anyhow::Result<()> {
     let quotes = futures::future::join_all(
         venues
             .iter()
@@ -77,7 +78,7 @@ async fn poll(client: &reqwest::Client, venues: &[Venue], path: &str) -> anyhow:
     .await;
 
     let mut map = Map::new();
-    map.insert("ts".to_string(), Value::from(now_ms()));
+    map.insert("ts".to_string(), Value::from(ts));
     for (key, quote) in quotes {
         map.insert(
             key.to_string(),
@@ -103,9 +104,10 @@ async fn main() -> anyhow::Result<()> {
 
     loop {
         ticker.tick().await;
+        let ts = now_ms();
         let (dot, usd) = tokio::join!(
-            poll(&client, DOT_VENUES, "dotprice.ndjson"),
-            poll(&client, USD_VENUES, "usdprice.ndjson"),
+            poll(&client, DOT_VENUES, "dotprice.ndjson", ts),
+            poll(&client, USD_VENUES, "usdprice.ndjson", ts),
         );
         if let Err(e) = dot {
             eprintln!("dot poll error: {e}");
