@@ -65,6 +65,34 @@ with `jq`:
 jq -c '{ts, binance}' dotprice.ndjson
 ```
 
+## Run as a service (Linux)
+
+To keep the poller running in the background on a Linux server, there's a
+systemd unit in `deploy/`. On the target machine, from the repo root:
+
+```sh
+sudo deploy/install.sh
+```
+
+That builds the release binary, creates a dedicated `mini-oracle` system user
+and a data directory at `/var/lib/mini-oracle`, installs the binary to
+`/usr/local/bin/mini-oracle` and the unit to
+`/etc/systemd/system/mini-oracle.service`, then enables and starts it. The
+service polls every 10s (`--interval-ms 10000`) and restarts automatically on
+crash or reboot.
+
+```sh
+systemctl status mini-oracle      # is it running
+journalctl -u mini-oracle -f      # follow logs
+ls -l /var/lib/mini-oracle        # the .ndjson files land here
+```
+
+To change the interval, edit `ExecStart` in
+`/etc/systemd/system/mini-oracle.service`, then
+`sudo systemctl daemon-reload && sudo systemctl restart mini-oracle`. Re-running
+`deploy/install.sh` upgrades the binary and unit in place. Stop and remove with
+`sudo systemctl disable --now mini-oracle`.
+
 ## Dashboard
 
 `scripts/` holds an interactive dashboard that turns the collected ticks into an

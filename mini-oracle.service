@@ -1,0 +1,15 @@
+[Unit]
+Description=mini-oracle price poller (DOT/USDT VWAP oracle)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/luka/mini-oracle
+ExecStart=/home/luka/mini-oracle/mini-oracle-prototype --interval-ms 10000
+
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=default.target
