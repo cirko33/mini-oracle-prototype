@@ -2,6 +2,7 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -50,12 +51,16 @@ export function VwapChart({
   colors,
   onRemove,
   showLive,
+  onSelect,
+  selectedIndex,
 }: {
   live: VwapPoint[];
   overlays: Overlay[];
   colors: ChartColors;
   onRemove: (id: string) => void;
   showLive: boolean;
+  onSelect: (index: number) => void;
+  selectedIndex: number | null;
 }) {
   // All series share the same tick sequence, so we merge by index.
   const data = live.map((p, i) => {
@@ -72,17 +77,33 @@ export function VwapChart({
   const hi = all.length ? Math.max(...all) : 1;
   const pad = (hi - lo) * 0.25 || hi * 0.002 || 0.01;
 
+  // Recharts reports the clicked tick as activeTooltipIndex; it may arrive as a
+  // stringified index, so coerce and bounds-check before selecting.
+  const handleClick = (state: any) => {
+    const raw = state?.activeTooltipIndex;
+    const idx = typeof raw === "number" ? raw : raw != null ? Number(raw) : NaN;
+    if (Number.isInteger(idx) && idx >= 0 && idx < data.length) onSelect(idx);
+  };
+  const selectedTs =
+    selectedIndex != null ? data[selectedIndex]?.ts ?? null : null;
+
   return (
     <div className="card">
       <h2>VWAP over time</h2>
       <p className="card-note">
         The oracle price across every tick for the current filters (the neutral
         line). In static mode, freeze a config as a colored curve to compare.
+        Click any point to see how that tick's VWAP was built.
       </p>
 
       <div className="chart-wrap">
         <ResponsiveContainer width="100%" height={320} minWidth={640}>
-          <LineChart data={data} margin={{ top: 10, right: 20, bottom: 20, left: 8 }}>
+          <LineChart
+            data={data}
+            margin={{ top: 10, right: 20, bottom: 20, left: 8 }}
+            onClick={handleClick}
+            style={{ cursor: "pointer" }}
+          >
             <CartesianGrid stroke={colors.grid} vertical={false} />
             <XAxis
               dataKey="ts"
@@ -105,6 +126,14 @@ export function VwapChart({
               content={<CustomTooltip colors={colors} />}
               cursor={{ stroke: colors.axis, strokeWidth: 1 }}
             />
+            {selectedTs != null && (
+              <ReferenceLine
+                x={selectedTs}
+                stroke={colors.categorical[0]}
+                strokeWidth={1.5}
+                strokeDasharray="4 3"
+              />
+            )}
             {overlays.map((ov) => (
               <Line
                 key={ov.id}

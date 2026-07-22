@@ -11,6 +11,7 @@ import { colorsFor, useTheme } from "./theme.ts";
 import { StatsPanel } from "./components/StatsPanel.tsx";
 import { Controls } from "./components/Controls.tsx";
 import { VwapChart, type Overlay } from "./components/VwapChart.tsx";
+import { BreakdownPanel } from "./components/BreakdownPanel.tsx";
 
 interface Feeds {
   dot: Snapshot[];
@@ -38,6 +39,7 @@ export function App() {
   const [params, setParams] = useState<FilterParams>(DEFAULT_PARAMS);
   const [overlays, setOverlays] = useState<Overlay[]>([]);
   const [showLive, setShowLive] = useState(true);
+  const [selected, setSelected] = useState<number | null>(null);
   const overlaySeq = useRef(0);
 
   useEffect(() => {
@@ -61,6 +63,13 @@ export function App() {
     if (!feeds || feeds.dot.length === 0) return [];
     return vwapSeries(feeds.dot, params, feeds.usd);
   }, [feeds, params]);
+
+  // Full per-venue breakdown of the selected tick, under the current filters.
+  const selectedResult = useMemo(() => {
+    if (selected === null || !feeds) return null;
+    if (selected < 0 || selected >= feeds.dot.length) return null;
+    return runSnapshot(feeds.dot, selected, params, indexLookup);
+  }, [selected, feeds, params, indexLookup]);
 
   const onPlot = (color: string, label: string) => {
     if (!feeds) return;
@@ -145,7 +154,16 @@ export function App() {
         colors={colors}
         onRemove={onRemove}
         showLive={showLive}
+        onSelect={setSelected}
+        selectedIndex={selected}
       />
+
+      {selectedResult && (
+        <BreakdownPanel
+          result={selectedResult}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </div>
   );
 }

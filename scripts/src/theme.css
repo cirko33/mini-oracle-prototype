@@ -313,6 +313,61 @@ input[type="range"] {
   overflow-x: auto;
 }
 
+/* selected-tick breakdown */
+.breakdown-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.breakdown-head h2 {
+  margin: 0 0 3px;
+}
+
+.venue-table {
+  overflow-x: auto;
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+}
+.venue-table .vt-head,
+.venue-table .vt-row {
+  display: grid;
+  grid-template-columns: 1.4fr 1.2fr 1fr 1fr 0.8fr 0.7fr;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 8px;
+  min-width: 560px;
+}
+.venue-table .vt-head {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 11px;
+  border-bottom: 1px solid var(--border);
+}
+.venue-table .vt-row:not(:last-child) {
+  border-bottom: 1px solid var(--border);
+}
+.venue-table .num {
+  text-align: right;
+}
+.venue-table .vt-venue {
+  font-weight: 550;
+}
+.venue-table .vt-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-secondary);
+}
+.badge-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+}
+
 .status-msg {
   padding: 40px;
   text-align: center;
