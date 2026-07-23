@@ -10,6 +10,16 @@ export function fmtTime(ts: number): string {
   });
 }
 
+// Axis-style stamp: "dd/mm HH:MM" (day/month, 24-hour clock).
+export function fmtDateTime(ts: number): string {
+  const d = new Date(ts);
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  return `${dd}/${mm} ${hh}:${min}`;
+}
+
 export function fmtPrice(v: number | null, digits = 5): string {
   return v === null ? "—" : v.toFixed(digits);
 }

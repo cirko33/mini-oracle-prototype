@@ -59,10 +59,12 @@ export function App() {
     return runSnapshot(feeds.dot, feeds.dot.length - 1, params, indexLookup);
   }, [feeds, params, indexLookup]);
 
+  // Only compute the live curve while it's shown; when "current" is hidden we
+  // don't do this work or plot anything in the background.
   const liveSeries = useMemo(() => {
-    if (!feeds || feeds.dot.length === 0) return [];
+    if (!showLive || !feeds || feeds.dot.length === 0) return [];
     return vwapSeries(feeds.dot, params, feeds.usd);
-  }, [feeds, params]);
+  }, [feeds, params, showLive]);
 
   // Full per-venue breakdown of the selected tick, under the current filters.
   const selectedResult = useMemo(() => {

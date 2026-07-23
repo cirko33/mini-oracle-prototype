@@ -15,27 +15,38 @@ interface Props {
 
 function Slider(props: {
   name: string;
-  value: string;
+  format: (raw: number) => string;
   min: number;
   max: number;
   step: number;
   raw: number;
   hint?: string;
-  onChange: (v: number) => void;
+  onCommit: (v: number) => void;
 }) {
+  // Track the value locally while dragging so the thumb and label stay live,
+  // but only commit to params on release so the chart recomputes once, not on
+  // every frame (which flickers).
+  const [dragging, setDragging] = useState<number | null>(null);
+  const shown = dragging ?? props.raw;
+  const commit = (v: number) => {
+    setDragging(null);
+    props.onCommit(v);
+  };
   return (
     <div className="slider">
       <div className="slider-head">
         <span className="name">{props.name}</span>
-        <span className="val">{props.value}</span>
+        <span className="val">{props.format(shown)}</span>
       </div>
       <input
         type="range"
         min={props.min}
         max={props.max}
         step={props.step}
-        value={props.raw}
-        onChange={(e) => props.onChange(Number(e.target.value))}
+        value={shown}
+        onChange={(e) => setDragging(Number(e.target.value))}
+        onPointerUp={(e) => commit(Number(e.currentTarget.value))}
+        onKeyUp={(e) => commit(Number(e.currentTarget.value))}
       />
       <span className="hint">{props.hint ?? ""}</span>
     </div>
@@ -61,33 +72,33 @@ export function Controls(props: Props) {
       <div className="controls-grid">
         <Slider
           name="Staleness window"
-          value={fmtDuration(params.stalenessWindowMs)}
+          format={(min) => fmtDuration(min * 60000)}
           min={0}
           max={1440}
           step={5}
           raw={params.stalenessWindowMs / 60000}
           hint="Drop venues whose price is flat across this lookback (0–24h)."
-          onChange={(min) => set({ stalenessWindowMs: min * 60000 })}
+          onCommit={(min) => set({ stalenessWindowMs: min * 60000 })}
         />
         <Slider
           name="Min volume share"
-          value={`${(params.minVolumeShare * 100).toFixed(1)}%`}
+          format={(pct) => `${pct.toFixed(1)}%`}
           min={0}
           max={100}
           step={0.1}
           raw={params.minVolumeShare * 100}
           hint="Drop venues below this share of total USD volume (Vp/Vtotal)."
-          onChange={(pct) => set({ minVolumeShare: pct / 100 })}
+          onCommit={(pct) => set({ minVolumeShare: pct / 100 })}
         />
         <Slider
           name="MAD threshold"
-          value={params.madThreshold === 0 ? "off" : params.madThreshold.toFixed(1)}
+          format={(v) => (v === 0 ? "off" : v.toFixed(1))}
           min={0}
           max={5}
           step={0.1}
           raw={params.madThreshold}
           hint="Drop prices whose modified z-score exceeds this (0 = off)."
-          onChange={(v) => set({ madThreshold: v })}
+          onCommit={(v) => set({ madThreshold: v })}
         />
       </div>
 

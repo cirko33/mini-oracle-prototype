@@ -1,7 +1,9 @@
+import { useState, useRef } from "react";
 import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceArea,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -10,7 +12,7 @@ import {
 } from "recharts";
 import type { VwapPoint } from "../lib/pipeline.ts";
 import type { ChartColors } from "../theme.ts";
-import { fmtPrice, fmtTime } from "../format.ts";
+import { fmtDateTime, fmtPrice, fmtTime } from "../format.ts";
 
 export interface Overlay {
   id: string;
@@ -62,24 +64,82 @@ export function VwapChart({
   onSelect: (index: number) => void;
   selectedIndex: number | null;
 }) {
-  // All series share the same tick sequence, so we merge by index.
-  const data = live.map((p, i) => {
-    const row: Record<string, number | null> = { ts: p.ts, live: p.vwap };
+  // All series share the same tick sequence, so we merge by index. When the
+  // live curve is hidden we don't plot it in the background at all — the
+  // backbone comes from the plotted overlays instead (empty if there are none).
+  const backbone = showLive && live.length ? live : overlays[0]?.points ?? [];
+  const data = backbone.map((p, i) => {
+    const row: Record<string, number | null> = { ts: p.ts };
+    if (showLive) row.live = live[i]?.vwap ?? null;
     for (const ov of overlays) row[ov.id] = ov.points[i]?.vwap ?? null;
     return row;
   });
 
+  // Zoom is an X-axis (time) window; null means the full range. While dragging,
+  // refLeft/refRight hold the in-progress selection.
+  const [xDomain, setXDomain] = useState<[number, number] | null>(null);
+  const [refLeft, setRefLeft] = useState<number | null>(null);
+  const [refRight, setRefRight] = useState<number | null>(null);
+  const didZoom = useRef(false);
+
+  const tsValues = data.map((d) => d.ts as number);
+  const tsMin = tsValues.length ? Math.min(...tsValues) : 0;
+  const tsMax = tsValues.length ? Math.max(...tsValues) : 1;
+  const [xLo, xHi] = xDomain ?? [tsMin, tsMax];
+  const inView = (ts: number) => ts >= xLo && ts <= xHi;
+
+  // Y rescales to whatever is currently in view.
   const all: number[] = [];
-  if (showLive) for (const p of live) if (p.vwap !== null) all.push(p.vwap);
+  if (showLive)
+    for (const p of live) if (p.vwap !== null && inView(p.ts)) all.push(p.vwap);
   for (const ov of overlays)
-    for (const p of ov.points) if (p.vwap !== null) all.push(p.vwap);
+    for (const p of ov.points)
+      if (p.vwap !== null && inView(p.ts)) all.push(p.vwap);
   const lo = all.length ? Math.min(...all) : 0;
   const hi = all.length ? Math.max(...all) : 1;
   const pad = (hi - lo) * 0.25 || hi * 0.002 || 0.01;
 
+  const clampDomain = (a: number, b: number): [number, number] => {
+    const nlo = Math.max(tsMin, Math.min(a, b));
+    const nhi = Math.min(tsMax, Math.max(a, b));
+    return nhi > nlo ? [nlo, nhi] : [tsMin, tsMax];
+  };
+  // factor < 1 zooms in (narrower window), > 1 zooms out; snaps back to the
+  // full range (null) once it covers everything.
+  const zoomBy = (factor: number) => {
+    const center = (xLo + xHi) / 2;
+    const half = ((xHi - xLo) / 2) * factor;
+    const next = clampDomain(center - half, center + half);
+    setXDomain(next[0] <= tsMin && next[1] >= tsMax ? null : next);
+  };
+
+  // Drag across the plot to zoom into that range; a plain click still selects.
+  const onMouseDown = (e: any) => {
+    didZoom.current = false; // fresh interaction; only a real drag re-arms it
+    if (e?.activeLabel == null) return;
+    setRefLeft(Number(e.activeLabel));
+    setRefRight(null);
+  };
+  const onMouseMove = (e: any) => {
+    if (refLeft != null && e?.activeLabel != null)
+      setRefRight(Number(e.activeLabel));
+  };
+  const onMouseUp = () => {
+    if (refLeft != null && refRight != null && refLeft !== refRight) {
+      setXDomain(clampDomain(refLeft, refRight));
+      didZoom.current = true; // swallow the click that trails the drag
+    }
+    setRefLeft(null);
+    setRefRight(null);
+  };
+
   // Recharts reports the clicked tick as activeTooltipIndex; it may arrive as a
   // stringified index, so coerce and bounds-check before selecting.
   const handleClick = (state: any) => {
+    if (didZoom.current) {
+      didZoom.current = false;
+      return;
+    }
     const raw = state?.activeTooltipIndex;
     const idx = typeof raw === "number" ? raw : raw != null ? Number(raw) : NaN;
     if (Number.isInteger(idx) && idx >= 0 && idx < data.length) onSelect(idx);
@@ -89,11 +149,29 @@ export function VwapChart({
 
   return (
     <div className="card">
-      <h2>VWAP over time</h2>
+      <div className="chart-head">
+        <h2>VWAP over time</h2>
+        <div className="zoom-toolbar">
+          <button className="btn" onClick={() => zoomBy(1 / 0.6)} aria-label="zoom out">
+            −
+          </button>
+          <button className="btn" onClick={() => zoomBy(0.6)} aria-label="zoom in">
+            +
+          </button>
+          <button
+            className="btn"
+            onClick={() => setXDomain(null)}
+            disabled={xDomain === null}
+          >
+            Reset
+          </button>
+        </div>
+      </div>
       <p className="card-note">
         The oracle price across every tick for the current filters (the neutral
         line). In static mode, freeze a config as a colored curve to compare.
-        Click any point to see how that tick's VWAP was built.
+        Click any point to see how that tick's VWAP was built, or drag across the
+        plot to zoom into a time range.
       </p>
 
       <div className="chart-wrap">
@@ -102,15 +180,19 @@ export function VwapChart({
             data={data}
             margin={{ top: 10, right: 20, bottom: 20, left: 8 }}
             onClick={handleClick}
+            onMouseDown={onMouseDown}
+            onMouseMove={onMouseMove}
+            onMouseUp={onMouseUp}
             style={{ cursor: "pointer" }}
           >
             <CartesianGrid stroke={colors.grid} vertical={false} />
             <XAxis
               dataKey="ts"
               type="number"
-              domain={["dataMin", "dataMax"]}
+              domain={[xLo, xHi]}
+              allowDataOverflow
               scale="time"
-              tickFormatter={fmtTime}
+              tickFormatter={fmtDateTime}
               tick={{ fill: colors.muted, fontSize: 11 }}
               stroke={colors.axis}
               minTickGap={40}
@@ -132,6 +214,15 @@ export function VwapChart({
                 stroke={colors.categorical[0]}
                 strokeWidth={1.5}
                 strokeDasharray="4 3"
+              />
+            )}
+            {refLeft != null && refRight != null && (
+              <ReferenceArea
+                x1={refLeft}
+                x2={refRight}
+                strokeOpacity={0.3}
+                fill={colors.categorical[0]}
+                fillOpacity={0.12}
               />
             )}
             {overlays.map((ov) => (
